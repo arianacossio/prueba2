@@ -1,0 +1,573 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Dashboard Financiero Personal + Checklist & Notas</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/3.9.1/chart.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; background: linear-gradient(135deg, #ff9a9e 0%, #fecfef 50%, #fecfef 100%); min-height: 100vh; padding: 20px; }
+        .container { max-width: 1400px; margin: 0 auto; background: white; border-radius: 15px; box-shadow: 0 20px 40px rgba(0,0,0,0.1); overflow: hidden; }
+        .header { background: linear-gradient(135deg, #ff6b9d, #c44569); color: white; padding: 30px; text-align: center; position: relative; }
+        .logo { width: 80px; height: 80px; margin: 0 auto 15px; background: rgba(255,255,255,0.1); border-radius: 20px; display: flex; align-items: center; justify-content: center; backdrop-filter: blur(10px); border: 2px solid rgba(255,255,255,0.2); box-shadow: 0 8px 32px rgba(0,0,0,0.1); transition: transform 0.3s ease; }
+        .logo:hover { transform: scale(1.05); }
+        .logo img { width: 70px; height: 70px; object-fit: contain; border-radius: 15px; }
+        .header h1 { font-size: 2.5rem; margin-bottom: 10px; font-weight: 300; }
+        .header-buttons { margin-top: 20px; display: flex; justify-content: center; gap: 15px; flex-wrap: wrap; }
+        .save-btn, .export-btn { color: white; border: none; padding: 12px 25px; border-radius: 25px; cursor: pointer; font-weight: 600; font-size: 1rem; transition: all 0.3s ease; position: relative; overflow: hidden; }
+        .save-btn { background: linear-gradient(135deg, #f093fb, #f5576c); box-shadow: 0 4px 15px rgba(240, 147, 251, 0.4); animation: pulse 2s infinite; }
+        .export-btn { background: linear-gradient(135deg, #4facfe, #00f2fe); box-shadow: 0 4px 15px rgba(79, 172, 254, 0.4); }
+        .save-btn:hover, .export-btn:hover { transform: translateY(-3px); box-shadow: 0 8px 25px rgba(240, 147, 251, 0.6); animation: none; }
+        .export-btn:hover { box-shadow: 0 8px 25px rgba(79, 172, 254, 0.6); }
+        .save-btn:active, .export-btn:active { transform: translateY(-1px); }
+        .save-btn::before, .export-btn::before { content: ''; position: absolute; top: 0; left: -100%; width: 100%; height: 100%; background: linear-gradient(90deg, transparent, rgba(255,255,255,0.3), transparent); transition: left 0.5s; }
+        .save-btn:hover::before, .export-btn:hover::before { left: 100%; }
+        @keyframes pulse { 0% { box-shadow: 0 4px 15px rgba(240, 147, 251, 0.4);} 50% { box-shadow: 0 6px 20px rgba(240, 147, 251, 0.7);} 100% { box-shadow: 0 4px 15px rgba(240, 147, 251, 0.4);} }
+        .save-status { display: inline-block; margin-left: 10px; padding: 5px 10px; border-radius: 15px; font-size: 0.8rem; font-weight: 500; transition: all 0.3s ease; }
+        .save-status.saved { background: rgba(255, 107, 157, 0.2); color: #c44569; }
+        .save-status.saving { background: rgba(240, 147, 251, 0.2); color: #8e44ad; animation: blink 1s infinite; }
+        .save-status.error { background: rgba(231, 76, 60, 0.2); color: #c0392b; }
+        @keyframes blink { 0%, 50% { opacity: 1; } 51%, 100% { opacity: 0.5; } }
+        .auto-save-indicator { position: fixed; top: 20px; right: 20px; background: rgba(255, 255, 255, 0.9); backdrop-filter: blur(10px); padding: 8px 15px; border-radius: 20px; box-shadow: 0 4px 15px rgba(0,0,0,0.1); font-size: 0.8rem; font-weight: 500; opacity: 0; transition: opacity 0.3s ease; z-index: 1000; }
+        .auto-save-indicator.show { opacity: 1; }
+        .summary-cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); gap: 20px; padding: 30px; background: linear-gradient(135deg, #ffeef8, #f8e8ff); }
+        .card { background: white; padding: 25px; border-radius: 12px; box-shadow: 0 5px 15px rgba(0,0,0,0.08); transition: transform 0.3s ease; }
+        .card:hover { transform: translateY(-5px); }
+        .card h3 { font-size: 0.9rem; color: #6c757d; margin-bottom: 10px; text-transform: uppercase; letter-spacing: 1px; }
+        .card .amount { font-size: 2rem; font-weight: 600; color: #2c3e50; }
+        .income { border-left: 4px solid #ff6b9d; }
+        .expenses { border-left: 4px solid #f8b500; }
+        .savings { border-left: 4px solid #ff9ff3; }
+        .balance { border-left: 4px solid #f368e0; }
+        .main-content { padding: 30px; }
+        .tabs { display: flex; margin-bottom: 30px; border-bottom: 2px solid #ecf0f1; flex-wrap: wrap; gap: 8px; }
+        .tab { padding: 15px 30px; cursor: pointer; border: none; background: none; font-size: 1rem; font-weight: 500; color: #7f8c8d; transition: all 0.3s ease; }
+        .tab.active { color: #c44569; border-bottom: 3px solid #ff6b9d; }
+        .tab-content { display: none; }
+        .tab-content.active { display: block; }
+        .section-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px; }
+        .section-header h2 { color: #c44569; font-size: 1.5rem; }
+        .add-btn { background: linear-gradient(135deg, #ff6b9d, #f368e0); color: white; border: none; padding: 10px 20px; border-radius: 8px; cursor: pointer; font-weight: 500; transition: all 0.3s ease; box-shadow: 0 4px 15px rgba(255, 107, 157, 0.3); }
+        .add-btn:hover { transform: translateY(-2px); box-shadow: 0 6px 20px rgba(255, 107, 157, 0.4); }
+        .table-container { background: white; border-radius: 12px; overflow: hidden; box-shadow: 0 5px 15px rgba(0,0,0,0.08); margin-bottom: 30px; }
+        table { width: 100%; border-collapse: collapse; }
+        th { background: linear-gradient(135deg, #c44569, #8e44ad); color: white; padding: 15px; text-align: left; font-weight: 500; }
+        td { padding: 12px 15px; border-bottom: 1px solid #ecf0f1; }
+        tr:hover { background: #f8f9fa; }
+        .editable { background: none; border: none; padding: 5px; width: 100%; font-size: 0.9rem; }
+        .editable:focus { outline: 2px solid #ff6b9d; border-radius: 4px; }
+        .delete-btn { background: linear-gradient(135deg, #ff6b9d, #c44569); color: white; border: none; padding: 5px 10px; border-radius: 4px; cursor: pointer; font-size: 0.8rem; transition: all 0.3s ease; }
+        .delete-btn:hover { transform: translateY(-1px); box-shadow: 0 4px 8px rgba(255, 107, 157, 0.3); }
+        .charts-container { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; margin-bottom: 30px; max-width: 800px; margin-left: auto; margin-right: auto; }
+        .chart-box { background: white; padding: 20px; border-radius: 12px; box-shadow: 0 5px 15px rgba(0,0,0,0.08); height: 300px; display: flex; flex-direction: column; }
+        .chart-box canvas { flex: 1; max-height: 220px !important; }
+        .chart-box h3 { color: #c44569; margin-bottom: 20px; text-align: center; }
+        .insights { background: linear-gradient(135deg, #ff9a9e, #f093fb); color: white; padding: 25px; border-radius: 12px; margin-bottom: 30px; }
+        .insights h3 { margin-bottom: 15px; font-size: 1.3rem; }
+        .insight-item { background: rgba(255,255,255,0.1); padding: 15px; border-radius: 8px; margin-bottom: 10px; backdrop-filter: blur(10px); }
+        .amount-positive { color: #ff6b9d; font-weight: 600; }
+        .amount-negative { color: #f8b500; font-weight: 600; }
+        .notification { position: fixed; top: 80px; right: 20px; background: white; padding: 15px 20px; border-radius: 10px; box-shadow: 0 8px 25px rgba(0,0,0,0.15); transform: translateX(400px); transition: transform 0.3s ease; z-index: 1000; border-left: 4px solid #ff6b9d; }
+        .notification.show { transform: translateX(0); }
+        .notification.success { border-left-color: #27ae60; }
+        .notification.error { border-left-color: #e74c3c; }
+        @media (max-width: 768px) {
+            .charts-container { grid-template-columns: 1fr; }
+            .summary-cards { grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); padding: 20px; }
+            .main-content { padding: 20px; }
+            .tabs { flex-wrap: wrap; }
+            .tab { padding: 10px 15px; font-size: 0.9rem; }
+            .header-buttons { flex-direction: column; align-items: center; }
+            .save-btn, .export-btn { width: 200px; }
+        }
+
+        /* ====== Checklist & Notas (NAMESPACED) ====== */
+        .checklist-notes-container { display: grid; grid-template-columns: 1fr 1fr; gap: 30px; margin: 10px 0 30px; padding: 0 10px; }
+        .checklist-section, .notes-section { background: white; border-radius: 15px; box-shadow: 0 8px 25px rgba(0,0,0,0.1); overflow: hidden; }
+        .fin-section-header { background: linear-gradient(135deg, #ff6b9d, #c44569); color: white; padding: 20px 25px; display: flex; justify-content: space-between; align-items: center; }
+        .fin-section-header h3 { margin: 0; font-size: 1.2rem; font-weight: 600; }
+        .add-task-btn, .save-notes-btn, .clear-notes-btn { background: rgba(255,255,255,0.2); color: white; border: none; padding: 8px 15px; border-radius: 20px; cursor: pointer; font-size: 0.85rem; font-weight: 500; transition: all 0.3s ease; backdrop-filter: blur(10px); border: 1px solid rgba(255,255,255,0.3); }
+        .add-task-btn:hover, .save-notes-btn:hover, .clear-notes-btn:hover { background: rgba(255,255,255,0.3); transform: translateY(-2px); }
+        .notes-actions { display: flex; gap: 10px; }
+        .checklist-wrapper, .notes-wrapper { padding: 25px; max-height: 400px; overflow-y: auto; }
+        .checklist { display: flex; flex-direction: column; gap: 12px; }
+        .task-item { display: flex; align-items: center; padding: 12px 15px; background: linear-gradient(135deg, #ffeef8, #f8e8ff); border-radius: 10px; border-left: 4px solid #ff6b9d; transition: all 0.3s ease; position: relative; }
+        .task-item:hover { transform: translateX(5px); box-shadow: 0 4px 15px rgba(255, 107, 157, 0.2); }
+        .task-item.completed { opacity: 0.7; border-left-color: #27ae60; background: linear-gradient(135deg, #eafaf1, #e8f5e8); }
+        .task-checkbox { width: 20px; height: 20px; margin-right: 12px; cursor: pointer; accent-color: #ff6b9d; transform: scale(1.2); }
+        .task-text { flex: 1; background: none; border: none; font-size: 0.95rem; color: #2c3e50; padding: 5px 0; font-family: inherit; }
+        .task-text:focus { outline: none; background: rgba(255,255,255,0.5); border-radius: 5px; padding: 5px 8px; }
+        .task-item.completed .task-text { text-decoration: line-through; color: #7f8c8d; }
+        .delete-task-btn { background: linear-gradient(135deg, #ff6b9d, #c44569); color: white; border: none; width: 30px; height: 30px; border-radius: 50%; cursor: pointer; font-size: 0.8rem; display: flex; align-items: center; justify-content: center; transition: all 0.3s ease; opacity: 0.7; }
+        .delete-task-btn:hover { opacity: 1; transform: scale(1.1); box-shadow: 0 4px 10px rgba(255, 107, 157, 0.3); }
+        #notesTextarea { width: 100%; height: 320px; border: none; background: linear-gradient(135deg, #ffeef8, #f8e8ff); border-radius: 10px; padding: 20px; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; font-size: 0.95rem; line-height: 1.6; color: #2c3e50; resize: none; outline: none; border: 2px solid transparent; transition: all 0.3s ease; }
+        #notesTextarea:focus { border-color: #ff6b9d; box-shadow: 0 0 0 3px rgba(255, 107, 157, 0.1); background: linear-gradient(135deg, #fff5fa, #fdf2ff); }
+        #notesTextarea::placeholder { color: #95a5a6; font-style: italic; }
+        .notes-status { margin-top: 10px; padding: 8px 12px; border-radius: 20px; font-size: 0.8rem; font-weight: 500; text-align: center; transition: all 0.3s ease; min-height: 20px; }
+        .notes-status.saved { background: rgba(39, 174, 96, 0.1); color: #27ae60; border: 1px solid rgba(39, 174, 96, 0.2); }
+        .notes-status.changed { background: rgba(255, 107, 157, 0.1); color: #c44569; border: 1px solid rgba(255, 107, 157, 0.2); }
+        .empty-state { text-align: center; color: #95a5a6; font-style: italic; padding: 40px 20px; }
+        .task-counter { position: absolute; top: 10px; right: 15px; background: rgba(255,255,255,0.2); color: white; padding: 4px 8px; border-radius: 10px; font-size: 0.7rem; font-weight: 500; }
+        .checklist-wrapper::-webkit-scrollbar, .notes-wrapper::-webkit-scrollbar { width: 6px; }
+        .checklist-wrapper::-webkit-scrollbar-track, .notes-wrapper::-webkit-scrollbar-track { background: #f1f1f1; border-radius: 3px; }
+        .checklist-wrapper::-webkit-scrollbar-thumb, .notes-wrapper::-webkit-scrollbar-thumb { background: #ff6b9d; border-radius: 3px; }
+        .checklist-wrapper::-webkit-scrollbar-thumb:hover, .notes-wrapper::-webkit-scrollbar-thumb:hover { background: #c44569; }
+        @keyframes taskSlideIn { from { opacity: 0; transform: translateX(-20px);} to { opacity: 1; transform: translateX(0);} }
+        .task-item.new { animation: taskSlideIn 0.3s ease-out; }
+        @media (max-width: 768px) {
+            .checklist-notes-container { grid-template-columns: 1fr; gap: 20px; padding: 0 0; margin: 10px 0 20px; }
+            .fin-section-header { padding: 15px 20px; flex-direction: column; gap: 10px; text-align: center; }
+            .notes-actions { justify-content: center; }
+            .checklist-wrapper, .notes-wrapper { padding: 20px; max-height: 300px; }
+            #notesTextarea { height: 250px; padding: 15px; }
+        }
+    </style>
+</head>
+<body>
+    <div class="auto-save-indicator" id="autoSaveIndicator">💾 Auto-guardado</div>
+    <div class="notification" id="notification"></div>
+
+    <div class="container">
+        <div class="header">
+            <div class="logo">
+                <img src="https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcTIv9duIv4Idmdv-2FPuAVlxTWdvKrJmkXJyMEMikrF_kO3KpRbj5yN-fNHYYt_Z1xKXSo&usqp=CAU" alt="Financial Dashboard Logo" />
+            </div>
+            <h1>💰 Dashboard Financiero Personal</h1>
+            <p>Gestiona tus finanzas de manera inteligente</p>
+            <div class="header-buttons">
+                <button class="save-btn" onclick="manualSave()">✨ Guardar Datos</button>
+                <button class="export-btn" onclick="exportToExcel()">📊 Exportar a Excel</button>
+                <span id="saveStatus" class="save-status"></span>
+            </div>
+        </div>
+
+        <div class="summary-cards">
+            <div class="card income">
+                <h3>Ingresos Totales</h3>
+                <div class="amount" id="totalIncome">$0</div>
+            </div>
+            <div class="card expenses">
+                <h3>Gastos Totales</h3>
+                <div class="amount" id="totalExpenses">$0</div>
+            </div>
+            <div class="card savings">
+                <h3>Ahorros</h3>
+                <div class="amount" id="totalSavings">$0</div>
+            </div>
+            <div class="card balance">
+                <h3>Balance</h3>
+                <div class="amount" id="balance">$0</div>
+            </div>
+        </div>
+
+        <div class="main-content">
+            <div class="tabs">
+                <button class="tab active" onclick="showTab(event, 'income')">💵 Ingresos</button>
+                <button class="tab" onclick="showTab(event, 'expenses')">💳 Gastos</button>
+                <button class="tab" onclick="showTab(event, 'savings')">🏦 Ahorros</button>
+                <button class="tab" onclick="showTab(event, 'analytics')">📊 Análisis</button>
+                <button class="tab" onclick="showTab(event, 'notesTab')">🗒️ Checklist & Notas</button>
+            </div>
+
+            <!-- Pestaña de Ingresos -->
+            <div id="income" class="tab-content active">
+                <div class="section-header">
+                    <h2>Gestión de Ingresos</h2>
+                    <button class="add-btn" onclick="addIncomeRow()">+ Agregar Ingreso</button>
+                </div>
+                <div class="table-container">
+                    <table>
+                        <thead>
+                            <tr>
+                                <th>Descripción</th>
+                                <th>Tipo</th>
+                                <th>Monto</th>
+                                <th>Fecha</th>
+                                <th>Acciones</th>
+                            </tr>
+                        </thead>
+                        <tbody id="incomeTable"></tbody>
+                    </table>
+                </div>
+            </div>
+
+            <!-- Pestaña de Gastos -->
+            <div id="expenses" class="tab-content">
+                <div class="section-header">
+                    <h2>Gestión de Gastos</h2>
+                    <button class="add-btn" onclick="addExpenseRow()">+ Agregar Gasto</button>
+                </div>
+                <div class="table-container">
+                    <table>
+                        <thead>
+                            <tr>
+                                <th>Descripción</th>
+                                <th>Categoría</th>
+                                <th>Tipo</th>
+                                <th>Monto</th>
+                                <th>Fecha</th>
+                                <th>Acciones</th>
+                            </tr>
+                        </thead>
+                        <tbody id="expensesTable"></tbody>
+                    </table>
+                </div>
+            </div>
+
+            <!-- Pestaña de Ahorros -->
+            <div id="savings" class="tab-content">
+                <div class="section-header">
+                    <h2>Gestión de Ahorros</h2>
+                    <button class="add-btn" onclick="addSavingRow()">+ Agregar Ahorro</button>
+                </div>
+                <div class="table-container">
+                    <table>
+                        <thead>
+                            <tr>
+                                <th>Meta/Objetivo</th>
+                                <th>Monto Ahorrado</th>
+                                <th>Meta Total</th>
+                                <th>Fecha</th>
+                                <th>Acciones</th>
+                            </tr>
+                        </thead>
+                        <tbody id="savingsTable"></tbody>
+                    </table>
+                </div>
+            </div>
+
+            <!-- Pestaña de Análisis -->
+            <div id="analytics" class="tab-content">
+                <div class="insights">
+                    <h3>🔍 Insights Financieros</h3>
+                    <div id="insightsContainer"></div>
+                </div>
+                <div class="charts-container">
+                    <div class="chart-box">
+                        <h3>Distribución de Gastos</h3>
+                        <canvas id="expensesChart"></canvas>
+                    </div>
+                    <div class="chart-box">
+                        <h3>Ingresos vs Gastos</h3>
+                        <canvas id="incomeExpensesChart"></canvas>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Pestaña: Checklist & Notas -->
+            <div id="notesTab" class="tab-content">
+                <div class="checklist-notes-container">
+                    <div class="checklist-section">
+                        <div class="fin-section-header">
+                            <h3>✅ Lista de Tareas Financieras</h3>
+                            <button class="add-task-btn" onclick="addNewTask()">+ Nueva Tarea</button>
+                        </div>
+                        <div class="checklist-wrapper">
+                            <div id="checklistContainer" class="checklist"></div>
+                        </div>
+                    </div>
+                    <div class="notes-section">
+                        <div class="fin-section-header">
+                            <h3>📝 Notas Financieras</h3>
+                            <div class="notes-actions">
+                                <button class="save-notes-btn" onclick="saveNotes()">💾 Guardar</button>
+                                <button class="clear-notes-btn" onclick="clearNotes()">🗑️ Limpiar</button>
+                            </div>
+                        </div>
+                        <div class="notes-wrapper">
+                            <textarea id="notesTextarea" placeholder="Escribe tus notas financieras aquí...
+
+Algunas ideas:
+• Metas financieras del mes
+• Recordatorios de pagos
+• Ideas para ahorrar
+• Reflexiones sobre gastos
+• Planes de inversión" oninput="markNotesChanged()"></textarea>
+                            <div class="notes-status" id="notesStatus"></div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+        </div>
+    </div>
+
+    <script>
+        // ====== Estado principal (Ingresos, Gastos, Ahorros) ======
+        let data = { income: [], expenses: [], savings: [] };
+        let isDataChanged = false;
+        let autoSaveInterval;
+
+        document.addEventListener('DOMContentLoaded', function () {
+            loadDataFromStorage();
+            updateSummary();
+            updateCharts();
+            generateInsights();
+            startAutoSave();
+            window.addEventListener('beforeunload', function (e) {
+                if (isDataChanged) {
+                    e.preventDefault();
+                    saveDataToStorage();
+                    e.returnValue = 'Tienes cambios sin guardar. ¿Estás seguro de que quieres salir?';
+                }
+            });
+            document.addEventListener('input', markDataChanged);
+            document.addEventListener('change', markDataChanged);
+        });
+
+        function markDataChanged() { isDataChanged = true; }
+        function startAutoSave() { autoSaveInterval = setInterval(() => { if (isDataChanged) { autoSave(); } }, 30000); }
+        function stopAutoSave() { if (autoSaveInterval) clearInterval(autoSaveInterval); }
+
+        function manualSave() {
+            const saveStatus = document.getElementById('saveStatus');
+            saveStatus.textContent = 'Guardando...';
+            saveStatus.className = 'save-status saving';
+            try {
+                saveDataToStorage();
+                saveStatus.textContent = '✅ Guardado exitosamente';
+                saveStatus.className = 'save-status saved';
+                showNotification('Datos guardados exitosamente', 'success');
+                isDataChanged = false;
+                setTimeout(() => { saveStatus.textContent = ''; saveStatus.className = 'save-status'; }, 3000);
+            } catch (error) {
+                saveStatus.textContent = '❌ Error al guardar';
+                saveStatus.className = 'save-status error';
+                showNotification('Error al guardar los datos', 'error');
+                console.error('Error al guardar:', error);
+            }
+        }
+
+        function autoSave() { try { saveDataToStorage(); showAutoSaveIndicator(); isDataChanged = false; } catch (e) { console.error('Error en auto-guardado:', e); } }
+        function showAutoSaveIndicator() { const i = document.getElementById('autoSaveIndicator'); i.classList.add('show'); setTimeout(() => i.classList.remove('show'), 2000); }
+
+        function saveDataToStorage() {
+            const dataToSave = { ...data, lastSaved: new Date().toISOString(), version: '1.1' };
+            localStorage.setItem('financialDashboardData', JSON.stringify(dataToSave));
+        }
+
+        function loadDataFromStorage() {
+            try {
+                const savedData = localStorage.getItem('financialDashboardData');
+                if (savedData) {
+                    const parsed = JSON.parse(savedData);
+                    data = { income: parsed.income || [], expenses: parsed.expenses || [], savings: parsed.savings || [] };
+                    renderTables();
+                    showNotification('Datos cargados correctamente', 'success');
+                } else {
+                    loadSampleData();
+                    showNotification('Cargando datos de ejemplo', 'info');
+                }
+            } catch (error) {
+                console.error('Error al cargar datos:', error);
+                loadSampleData();
+                showNotification('Error al cargar datos, usando datos de ejemplo', 'error');
+            }
+        }
+
+        function exportToExcel() {
+            try {
+                showNotification('Generando archivo Excel...', 'info');
+                const wb = XLSX.utils.book_new();
+                const incomeData = data.income.map(i => ({ 'Descripción': i.description, 'Tipo': i.type, 'Monto': i.amount, 'Fecha': i.date }));
+                const expensesData = data.expenses.map(e => ({ 'Descripción': e.description, 'Categoría': e.category, 'Tipo': e.type, 'Monto': e.amount, 'Fecha': e.date }));
+                const savingsData = data.savings.map(s => ({ 'Meta/Objetivo': s.goal, 'Monto Ahorrado': s.saved, 'Meta Total': s.target, 'Progreso %': ((s.saved / s.target) * 100).toFixed(2), 'Fecha': s.date }));
+                const totalIncome = data.income.reduce((sum, i) => sum + (i.amount || 0), 0);
+                const totalExpenses = data.expenses.reduce((sum, e) => sum + (e.amount || 0), 0);
+                const totalSavings = data.savings.reduce((sum, s) => sum + (s.saved || 0), 0);
+                const balance = totalIncome - totalExpenses;
+                const summaryData = [
+                    { 'Concepto': 'Ingresos Totales', 'Monto': totalIncome },
+                    { 'Concepto': 'Gastos Totales', 'Monto': totalExpenses },
+                    { 'Concepto': 'Ahorros Totales', 'Monto': totalSavings },
+                    { 'Concepto': 'Balance', 'Monto': balance }
+                ];
+                XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(summaryData), 'Resumen');
+                XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(incomeData), 'Ingresos');
+                XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(expensesData), 'Gastos');
+                XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(savingsData), 'Ahorros');
+                const now = new Date();
+                const fileName = `Dashboard_Financiero_${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,'0')}-${String(now.getDate()).padStart(2,'0')}.xlsx`;
+                XLSX.writeFile(wb, fileName);
+                showNotification('Archivo Excel descargado exitosamente', 'success');
+            } catch (error) {
+                console.error('Error al exportar a Excel:', error);
+                showNotification('Error al generar el archivo Excel', 'error');
+            }
+        }
+
+        function showNotification(message, type = 'info') { const n = document.getElementById('notification'); n.textContent = message; n.className = `notification ${type}`; n.classList.add('show'); setTimeout(() => n.classList.remove('show'), 4000); }
+
+        function loadSampleData() {
+            data.income = [ { id: 1, description: 'Salario', type: 'Fijo', amount: 5000, date: '2024-01-01' }, { id: 2, description: 'Freelance', type: 'Variable', amount: 1200, date: '2024-01-15' } ];
+            data.expenses = [ { id: 1, description: 'Alquiler', category: 'Vivienda', type: 'Fijo', amount: 1500, date: '2024-01-01' }, { id: 2, description: 'Electricidad', category: 'Servicios', type: 'Fijo', amount: 200, date: '2024-01-05' }, { id: 3, description: 'Supermercado', category: 'Alimentación', type: 'Variable', amount: 800, date: '2024-01-10' } ];
+            data.savings = [ { id: 1, goal: 'Vacaciones', saved: 2000, target: 5000, date: '2024-01-01' }, { id: 2, goal: 'Emergencia', saved: 3000, target: 10000, date: '2024-01-01' } ];
+            renderTables();
+        }
+
+        function showTab(ev, tabName) {
+            document.querySelectorAll('.tab-content').forEach(tab => tab.classList.remove('active'));
+            document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+            document.getElementById(tabName).classList.add('active');
+            ev.target.classList.add('active');
+            if (tabName === 'analytics') { setTimeout(() => { updateCharts(); generateInsights(); }, 100); }
+        }
+
+        function renderTables() { renderIncomeTable(); renderExpensesTable(); renderSavingsTable(); }
+        function renderIncomeTable() {
+            const tbody = document.getElementById('incomeTable'); tbody.innerHTML = '';
+            data.income.forEach(item => {
+                const row = document.createElement('tr');
+                row.innerHTML = `
+                    <td><input type="text" class="editable" value="${item.description}" onchange="updateIncome(${item.id}, 'description', this.value)"></td>
+                    <td><select class="editable" onchange="updateIncome(${item.id}, 'type', this.value)"><option value="Fijo" ${item.type==='Fijo'?'selected':''}>Fijo</option><option value="Variable" ${item.type==='Variable'?'selected':''}>Variable</option></select></td>
+                    <td><input type="number" class="editable" value="${item.amount}" onchange="updateIncome(${item.id}, 'amount', parseFloat(this.value))"></td>
+                    <td><input type="date" class="editable" value="${item.date}" onchange="updateIncome(${item.id}, 'date', this.value)"></td>
+                    <td><button class="delete-btn" onclick="deleteIncome(${item.id})">Eliminar</button></td>`;
+                tbody.appendChild(row);
+            });
+        }
+        function renderExpensesTable() {
+            const tbody = document.getElementById('expensesTable'); tbody.innerHTML = '';
+            data.expenses.forEach(item => {
+                const row = document.createElement('tr');
+                row.innerHTML = `
+                    <td><input type="text" class="editable" value="${item.description}" onchange="updateExpense(${item.id}, 'description', this.value)"></td>
+                    <td><select class="editable" onchange="updateExpense(${item.id}, 'category', this.value)">
+                        <option value="Vivienda" ${item.category==='Vivienda'?'selected':''}>Vivienda</option>
+                        <option value="Alimentación" ${item.category==='Alimentación'?'selected':''}>Alimentación</option>
+                        <option value="Transporte" ${item.category==='Transporte'?'selected':''}>Transporte</option>
+                        <option value="Servicios" ${item.category==='Servicios'?'selected':''}>Servicios</option>
+                        <option value="Entretenimiento" ${item.category==='Entretenimiento'?'selected':''}>Entretenimiento</option>
+                        <option value="Salud" ${item.category==='Salud'?'selected':''}>Salud</option>
+                        <option value="Educación" ${item.category==='Educación'?'selected':''}>Educación</option>
+                        <option value="Otros" ${item.category==='Otros'?'selected':''}>Otros</option>
+                    </select></td>
+                    <td><select class="editable" onchange="updateExpense(${item.id}, 'type', this.value)"><option value="Fijo" ${item.type==='Fijo'?'selected':''}>Fijo</option><option value="Variable" ${item.type==='Variable'?'selected':''}>Variable</option></select></td>
+                    <td><input type="number" class="editable" value="${item.amount}" onchange="updateExpense(${item.id}, 'amount', parseFloat(this.value))"></td>
+                    <td><input type="date" class="editable" value="${item.date}" onchange="updateExpense(${item.id}, 'date', this.value)"></td>
+                    <td><button class="delete-btn" onclick="deleteExpense(${item.id})">Eliminar</button></td>`;
+                tbody.appendChild(row);
+            });
+        }
+        function renderSavingsTable() {
+            const tbody = document.getElementById('savingsTable'); tbody.innerHTML = '';
+            data.savings.forEach(item => {
+                const row = document.createElement('tr');
+                row.innerHTML = `
+                    <td><input type="text" class="editable" value="${item.goal}" onchange="updateSaving(${item.id}, 'goal', this.value)"></td>
+                    <td><input type="number" class="editable" value="${item.saved}" onchange="updateSaving(${item.id}, 'saved', parseFloat(this.value))"></td>
+                    <td><input type="number" class="editable" value="${item.target}" onchange="updateSaving(${item.id}, 'target', parseFloat(this.value))"></td>
+                    <td><input type="date" class="editable" value="${item.date}" onchange="updateSaving(${item.id}, 'date', this.value)"></td>
+                    <td><button class="delete-btn" onclick="deleteSaving(${item.id})">Eliminar</button></td>`;
+                tbody.appendChild(row);
+            });
+        }
+
+        function addIncomeRow() { const newId = Math.max(...data.income.map(i=>i.id),0)+1; data.income.push({ id:newId, description:'Nueva entrada', type:'Fijo', amount:0, date:new Date().toISOString().split('T')[0] }); renderIncomeTable(); updateSummary(); markDataChanged(); }
+        function addExpenseRow() { const newId = Math.max(...data.expenses.map(i=>i.id),0)+1; data.expenses.push({ id:newId, description:'Nuevo gasto', category:'Otros', type:'Variable', amount:0, date:new Date().toISOString().split('T')[0] }); renderExpensesTable(); updateSummary(); markDataChanged(); }
+        function addSavingRow() { const newId = Math.max(...data.savings.map(i=>i.id),0)+1; data.savings.push({ id:newId, goal:'Nueva meta', saved:0, target:1000, date:new Date().toISOString().split('T')[0] }); renderSavingsTable(); updateSummary(); markDataChanged(); }
+
+        function updateIncome(id, field, value) { const item = data.income.find(i=>i.id===id); if (item){ item[field]=value; updateSummary(); updateCharts(); generateInsights(); markDataChanged(); } }
+        function updateExpense(id, field, value) { const item = data.expenses.find(i=>i.id===id); if (item){ item[field]=value; updateSummary(); updateCharts(); generateInsights(); markDataChanged(); } }
+        function updateSaving(id, field, value) { const item = data.savings.find(i=>i.id===id); if (item){ item[field]=value; updateSummary(); generateInsights(); markDataChanged(); } }
+
+        function deleteIncome(id) { if (confirm('¿Estás seguro de que quieres eliminar este ingreso?')) { data.income = data.income.filter(i=>i.id!==id); renderIncomeTable(); updateSummary(); updateCharts(); generateInsights(); markDataChanged(); showNotification('Ingreso eliminado','success'); } }
+        function deleteExpense(id) { if (confirm('¿Estás seguro de que quieres eliminar este gasto?')) { data.expenses = data.expenses.filter(i=>i.id!==id); renderExpensesTable(); updateSummary(); updateCharts(); generateInsights(); markDataChanged(); showNotification('Gasto eliminado','success'); } }
+        function deleteSaving(id) { if (confirm('¿Estás seguro de que quieres eliminar este ahorro?')) { data.savings = data.savings.filter(i=>i.id!==id); renderSavingsTable(); updateSummary(); generateInsights(); markDataChanged(); showNotification('Ahorro eliminado','success'); } }
+
+        function updateSummary() {
+            const totalIncome = data.income.reduce((s,i)=>s+(i.amount||0),0);
+            const totalExpenses = data.expenses.reduce((s,e)=>s+(e.amount||0),0);
+            const totalSavings = data.savings.reduce((s,a)=>s+(a.saved||0),0);
+            const balance = totalIncome - totalExpenses;
+            document.getElementById('totalIncome').textContent = `S/ ${totalIncome.toFixed(2)}`;
+            document.getElementById('totalExpenses').textContent = `S/ ${totalExpenses.toFixed(2)}`;
+            document.getElementById('totalSavings').textContent = `S/ ${totalSavings.toFixed(2)}`;
+            const bal = document.getElementById('balance');
+            bal.textContent = `S/ ${balance.toFixed(2)}`;
+            bal.className = `amount ${balance >= 0 ? 'amount-positive' : 'amount-negative'}`;
+        }
+
+        let expensesChart, incomeExpensesChart;
+        function updateCharts(){ updateExpensesChart(); updateIncomeExpensesChart(); }
+        function updateExpensesChart(){
+            const ctx = document.getElementById('expensesChart').getContext('2d');
+            if (expensesChart) expensesChart.destroy();
+            const categories = {}; data.expenses.forEach(e=>{ categories[e.category] = (categories[e.category]||0) + (e.amount||0); });
+            const hasData = Object.keys(categories).length>0;
+            expensesChart = new Chart(ctx, { type:'doughnut', data:{ labels: hasData? Object.keys(categories): ['Sin datos'], datasets:[{ data: hasData? Object.values(categories): [1], backgroundColor: hasData? ['#ff6b9d','#f093fb','#ff9a9e','#ffeef8','#f368e0','#c44569','#4facfe','#00f2fe'] : ['#e0e0e0'] }] }, options:{ responsive:true, maintainAspectRatio:false, plugins:{ legend:{ position:'bottom', labels:{ boxWidth:12, padding:10, font:{ size:11 } } } } } });
+        }
+        function updateIncomeExpensesChart(){
+            const ctx = document.getElementById('incomeExpensesChart').getContext('2d');
+            if (incomeExpensesChart) incomeExpensesChart.destroy();
+            const totalIncome = data.income.reduce((s,i)=>s+(i.amount||0),0);
+            const totalExpenses = data.expenses.reduce((s,e)=>s+(e.amount||0),0);
+            incomeExpensesChart = new Chart(ctx, { type:'bar', data:{ labels:['Ingresos','Gastos'], datasets:[{ label:'Monto (S/)', data:[totalIncome,totalExpenses], backgroundColor:['#ff6b9d','#f8b500'], borderColor:['#c44569','#e67e22'], borderWidth:2, borderRadius:8 }] }, options:{ responsive:true, maintainAspectRatio:false, scales:{ y:{ beginAtZero:true, grid:{ color:'#f0f0f0' }, ticks:{ font:{ size:10 } } }, x:{ grid:{ display:false }, ticks:{ font:{ size:11 } } } }, plugins:{ legend:{ display:false } } } });
+        }
+
+        function generateInsights(){
+            const container = document.getElementById('insightsContainer');
+            const insights = [];
+            const totalIncome = data.income.reduce((s,i)=>s+(i.amount||0),0);
+            const totalExpenses = data.expenses.reduce((s,e)=>s+(e.amount||0),0);
+            const balance = totalIncome - totalExpenses;
+            const savingsRate = totalIncome>0? ((balance/totalIncome)*100):0;
+            if (savingsRate>20){ insights.push(`🎉 ¡Excelente! Tu tasa de ahorro es del ${savingsRate.toFixed(1)}%. Estás en el camino correcto hacia la libertad financiera.`); }
+            else if (savingsRate>10){ insights.push(`📈 Tu tasa de ahorro es del ${savingsRate.toFixed(1)}%. Es buena, pero considera aumentarla al 20% para mejorar tu salud financiera.`); }
+            else if (savingsRate>0){ insights.push(`💡 Tu tasa de ahorro es del ${savingsRate.toFixed(1)}%. Intenta reducir algunos gastos para alcanzar al menos el 10%.`); }
+            else { insights.push(`⚠️ Estás gastando más de lo que ingresas. Es crucial revisar y reducir tus gastos inmediatamente.`); }
+            const categoryTotals = {}; data.expenses.forEach(e=>{ categoryTotals[e.category] = (categoryTotals[e.category]||0) + (e.amount||0); });
+            if (Object.keys(categoryTotals).length>0){ const maxCategory = Object.entries(categoryTotals).reduce((a,b)=> a[1]>b[1]?a:b, ['',0]); if (maxCategory[0]){ const perc = ((maxCategory[1]/totalExpenses)*100); insights.push(`💰 Tu mayor gasto es en ${maxCategory[0]} (S/ ${maxCategory[1].toFixed(2)}), representando el ${perc.toFixed(1)}% de tus gastos totales.`); } }
+            const savingsProgress = data.savings.map(s=>({ goal: s.goal, progress: s.target>0? ((s.saved/s.target)*100):0, remaining: s.target - s.saved }));
+            savingsProgress.forEach(s=>{ if (s.progress>=100){ insights.push(`🏆 ¡Felicitaciones! Has completado tu meta de ${s.goal}.`); } else if (s.progress>=75){ insights.push(`🎯 Estás muy cerca de completar tu meta de ${s.goal} (${s.progress.toFixed(1)}%). Solo faltan S/ ${s.remaining.toFixed(2)}.`); } else if (s.progress>=50){ insights.push(`📊 Has alcanzado el ${s.progress.toFixed(1)}% de tu meta de ${s.goal}. ¡Sigue así!`); } });
+            const fixed = data.expenses.filter(e=>e.type==='Fijo').reduce((s,e)=>s+(e.amount||0),0);
+            if (totalExpenses>0){ const fixedPct = (fixed/totalExpenses)*100; if (fixedPct>60){ insights.push(`📋 Tus gastos fijos representan el ${fixedPct.toFixed(1)}% del total. Considera renegociar algunos servicios para reducir este porcentaje.`); } else if (fixedPct<30){ insights.push(`✨ Solo el ${fixedPct.toFixed(1)}% de tus gastos son fijos. Tienes buena flexibilidad financiera.`); } }
+            if (insights.length===0){ insights.push('📊 Agrega más datos para recibir insights personalizados sobre tu situación financiera.'); }
+            container.innerHTML = insights.map(i=>`<div class="insight-item">${i}</div>`).join('');
+        }
+
+        // ====== Checklist & Notas (usa localStorage independiente) ======
+        let tasks = [];
+        let notesChanged = false;
+
+        document.addEventListener('DOMContentLoaded', function(){
+            loadTasks();
+            loadNotes();
+            renderTasks();
+            updateTaskCounter();
+        });
+
+        function loadTasks(){
+            try { const saved = localStorage.getItem('financialTasks'); tasks = saved? JSON.parse(saved): [ {id:1,text:'Revisar gastos del mes',completed:false}, {id:2,text:'Actualizar presupuesto',completed:true}, {id:3,text:'Comparar precios de seguros',completed:false} ]; }
+            catch(e){ console.error('Error loading tasks:', e); tasks = []; }
+        }
+        function saveTasks(){ try { localStorage.setItem('financialTasks', JSON.stringify(tasks)); } catch(e){ console.error('Error saving tasks:', e); } }
+        function renderTasks(){
+            const container = document.getElementById('checklistContainer');
+            if (!container) return;
+            if (tasks.length===0){ container.innerHTML = '<div class="empty-state">No hay tareas. ¡Agrega tu primera tarea financiera!</div>'; return; }
+            container.innerHTML = tasks.map(task => `
+                <div class="task-item ${task.completed?'completed':''}" data-task-id="${task.id}">
+                    <input type="checkbox" class="task-checkbox" ${task.completed?'checked':''} onchange="toggleTask(${task.id})">
+                    <input type="text" class="task-text" value="${task.text}" onchange="updateTaskText(${task.id}, this.value)" onblur="saveTasks()">
+                    <button class="delete-task-btn" onclick="deleteTask(${task.id})">×</button>
+                </div>`).join('');
+            updateTaskCounter();
+        }
+        function addNewTask(){ const newId = Math.max(...tasks.map(t=>t.id),0)+1; const newTask={ id:newId, text:'Nueva tarea financiera', completed:false }; tasks.unshift(newTask); renderTasks(); saveTasks(); setTimeout(()=>{ const el = document.querySelector(`[data-task-id="${newId}"] .task-text`); if (el){ el.focus(); el.select(); } }, 100); }
+        function toggleTask(id){ const t = tasks.find(x=>x.id===id); if(t){ t.completed=!t.completed; renderTasks(); saveTasks(); } }
+        function updateTaskText(id, val){ const t = tasks.find(x=>x.id===id); if(t){ t.text = (val||'').trim() || 'Tarea sin nombre'; saveTasks(); } }
+        function deleteTask(id){ if (confirm('¿Estás seguro de que quieres eliminar esta tarea?')){ tasks = tasks.filter(t=>t.id!==id); renderTasks(); saveTasks(); } }
+        function updateTaskCounter(){ const completed = tasks.filter(t=>t.completed).length; const total = tasks.length; const header = document.querySelector('.checklist-section .fin-section-header h3'); if(header){ header.innerHTML = `✅ Lista de Tareas Financieras <span class="task-counter">${completed}/${total}</span>`; } }
+
+        function loadNotes(){ try { const saved = localStorage.getItem('financialNotes'); const ta = document.getElementById('notesTextarea'); if(ta && saved){ ta.value = saved; } notesChanged=false; } catch(e){ console.error('Error loading notes:', e); } }
+        function saveNotes(){ try { const ta = document.getElementById('notesTextarea'); const st = document.getElementById('notesStatus'); localStorage.setItem('financialNotes', ta.value); st.textContent='✅ Notas guardadas'; st.className='notes-status saved'; notesChanged=false; setTimeout(()=>{ st.textContent=''; st.className='notes-status'; }, 3000); } catch(e){ const st = document.getElementById('notesStatus'); st.textContent='❌ Error al guardar'; st.className='notes-status'; console.error('Error saving notes:', e); } }
+        function clearNotes(){ if (confirm('¿Estás seguro de que quieres borrar todas las notas?')){ const ta=document.getElementById('notesTextarea'); const st=document.getElementById('notesStatus'); ta.value=''; localStorage.removeItem('financialNotes'); notesChanged=false; st.textContent='🗑️ Notas borradas'; st.className='notes-status'; setTimeout(()=>{ st.textContent=''; }, 2000); } }
+        function markNotesChanged(){ if (!notesChanged){ notesChanged=true; const st=document.getElementById('notesStatus'); st.textContent='✏️ Hay cambios sin guardar'; st.className='notes-status changed'; } }
+        setInterval(()=>{ if (notesChanged){ const ta=document.getElementById('notesTextarea'); if (ta && ta.value.trim()){ localStorage.setItem('financialNotes', ta.value); const st=document.getElementById('notesStatus'); if (st.classList.contains('changed')){ st.textContent='💾 Auto-guardado'; st.className='notes-status saved'; setTimeout(()=>{ st.textContent=''; st.className='notes-status'; }, 2000); } notesChanged=false; } } }, 60000);
+    </script>
+</body>
+</html>
